@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <script>
+        // Save schedule when typing
+        document.addEventListener("DOMContentLoaded", function () {
+            document.getElementById("scheduleInput").addEventListener("input", function() {
+                localStorage.setItem("userSchedule", this.value);
+            });
+
+            // Restore schedule when page loads
+            const savedSchedule = localStorage.getItem("userSchedule");
+            if (savedSchedule) {
+                document.getElementById("scheduleInput").value = savedSchedule;
+            }
+        });
+		
+		
+        // Function to get CSRF token from the form
+        function getCSRFToken() {
+            return document.querySelector('input[name="csrf_token"]').value;
+        }
+    </script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Schedule to Calendar</title>
+	<link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+	<link rel="apple-touch-icon" href="/static/images/s2cFavicon.png">
+	<link rel="icon" sizes="192x192" href="/static/images/s2cFavicon192x.png">
+	<link rel="icon" sizes="512x512" href="/static/images/s2cFavicon512x.png">
+	<br>
+	<br>
+</head>
+<body>
+	<div class="flex-container">
+		<div class="column main-column">
+			<h1>Schedule to Calendar</h1>
+			<h3>Easily add your UC Davis course schedule to your Google Calendar in just a few clicks!</h3>
+			<form id="scheduleForm" method="POST" action="/process-schedule">
+
+				{{ form.hidden_tag() }}  <!-- Generates hidden CSRF token -->
+				{{ form.schedule(id="scheduleInput", rows=10, cols=50, placeholder="Please copy and paste your schedule here...") }}
+				<br>
+				<button type="button" onclick="previewSchedule()">Preview Schedule</button>
+				<button type="button" id="addToCalendarButton" onclick="addToCalendar()" style="display: inline-block;">Add to Calendar</button>
+				<button type="button" id="deleteFromCalendarButton" onclick="deleteFromCalendar()" style="display: inline-block;">Delete Events</button>
+				<br> <br>
+				<img src="static/images/myScheduleExample.png" alt="exampleSchedule" width="331" height="570" class="rounded-image"> <br> <br>
+				<div class="text-border"> <p style = "color:white">Find your schedule on <a href="https://my.ucdavis.edu/">myUCDavis</a>. Sign in, then simply copy your 
+				schedule from top to bottom, as seen in the image. Don't worry 
+				about irrelevant information like "show details..." - it will be parsed out!</p></div>
+			</form>
+			<br>
+			<div class="column side-column">
+				<!-- Area to display the response -->
+				<div id="responseArea">Your event details will appear here after processing...</div>
+			</div>
+		</div>
+		
+			{% if user_input %}
+				<h2>Your Escaped Input:</h2>
+				<p>{{ user_input | e }}</p>
+			{% endif %}
+
+		<script>
+		
+		document.getElementById("scheduleForm").addEventListener("submit", async function(event) {
+			event.preventDefault();  // Prevents default form submission
+
+			const scheduleText = document.getElementById("scheduleInput").value;
+			const csrfToken = document.querySelector('input[name="csrf_token"]').value;
+
+			const response = await fetch("/process-schedule", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"X-CSRFToken": csrfToken
+				},
+				body: JSON.stringify({ schedule: scheduleText })
+			});
+
+			const result = await response.text();
+			document.getElementById("responseArea").innerHTML = result;
+
+			history.pushState({}, "", "/");  // Removes POST data from browser history
+		});
+			let previewedEvents = null; // Store the previewed events for later use
+
+			// Function to preview the schedule
+			async function previewSchedule() {
+				const scheduleText = document.getElementById("scheduleInput").value;
+				const csrfToken = getCSRFToken();
+				
+				// Send POST request to the backend
+				const response = await fetch("/process-schedule", {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						"X-CSRFToken": csrfToken
+					},
+					body: JSON.stringify({ schedule: scheduleText })
+				});
+
+				// Get the response text
+				const result = await response.text();
+
+				// Display the preview in the response area
+				document.getElementById("responseArea").innerHTML = result;
+
+				// Store the events for later submission
+				previewedEvents = scheduleText; // You can store the raw schedule or parsed events
+			}
+
+			// Function to add events to Google Calendar
+			async function addToCalendar() {
+				if (!previewedEvents) {
+					alert("Please preview the schedule before adding it to your calendar.");
+					return;
+				}
+				
+				// Get CSRF token
+				const csrfToken = getCSRFToken();
+
+				// Send a request to the backend to add events to Google Calendar
+				const response = await fetch("/add-to-calendar", {
+					method: "POST",
+					headers: new Headers({
+						"Content-Type": "application/json",
+						"X-CSRFToken": csrfToken,  // Include CSRF token
+						"X-Requested-With": "XMLHttpRequest" // Ensures Flask detects AJAX request
+					}),
+					body: JSON.stringify({ schedule: previewedEvents })
+				});
+
+				const result = await response.json();
+				
+				if (result.redirect) {
+					console.log("DEBUG: Redirecting to:", result.redirect);
+					window.location.href = result.redirect;  // Manually redirect to login
+					return;
+				}
+
+				// Display the result of adding events to the calendar
+				if (result.message) {
+					alert(result.message || "Events have been added to your Google Calendar!");
+				}
+			}
+
+			// Function to delete events from Google Calendar
+			async function deleteFromCalendar() {
+				if (!previewedEvents) {
+					alert("Please preview the schedule before attempting to delete events.");
+					return;
+				}
+				
+				// Get CSRF token
+				const csrfToken = getCSRFToken();
+
+				// Send a request to the backend to delete events from Google Calendar
+				const response = await fetch("/delete-from-calendar", {
+					method: "POST",
+					headers: new Headers({
+						"Content-Type": "application/json",
+						 "X-CSRFToken": csrfToken,  // Include CSRF token
+						"X-Requested-With": "XMLHttpRequest" // Ensures Flask detects AJAX request
+					}),
+					body: JSON.stringify({ schedule: previewedEvents })
+				});
+
+				const result = await response.json();
+				
+				if (result.redirect) {
+					console.log("DEBUG: Redirecting to:", result.redirect);
+					window.location.href = result.redirect;  // Manually redirect to login
+					return;
+				}
+
+				// Display the result of deleting events from the calendar
+				if (result.message) {
+					alert(result.message || "Events have been deleted from your Google Calendar!");
+				}
+			}
+		</script>
+	</div>
+</body>
+</html>

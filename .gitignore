@@ -1,0 +1,31 @@
+Test Schedule Example.txt
+py3.10.6_venv
+.env
+credentials.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Flask default instance folder
+instance/
+
+# Editor/IDE settings
+.vscode/
+*.code-workspace
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Redis dump (if used)
+dump.rdb
+
+# Misc
+*.bak
+*.swp

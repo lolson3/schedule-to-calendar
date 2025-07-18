@@ -1,0 +1,166 @@
+/* General body styling */
+body {
+    font-family: Arial, sans-serif;
+    background-image: url('images/calendar-background.jpg'); /* Update with the correct path */
+    background-repeat: repeat; /* Ensures the image repeats */
+    background-size: auto; /* Keeps the image at its original size */
+    background-position: center; /* Optional: centers the starting point of the image */
+    margin: 0;
+    padding: 20px;
+    color: #333;
+    text-align: center;
+}
+
+.flex-container {
+    display: flex;
+    justify-content: space-between; /* Adjust spacing between columns */
+}
+
+.text-border {
+    border: 4px solid #d9aa00;
+    padding: 10px;
+    display: block; /* or inline-block */
+    width: fit-content;
+	margin: 0 auto;
+    background-color: #2f4f76; /* If needed */
+}
+
+/* Main (left) column styles */
+.main-column {
+    flex: 2; /* Make this column take up more space */
+    background-color: #2f4f76;
+    padding: 20px;
+    border: 5px solid #d9aa00;
+}
+
+/* Side (right) column styles */
+.side-column {
+    flex: 1; /* Make this column smaller */
+    background-color: #2f4f76;
+    padding: 20px;
+    border: 5px solid #d9aa00;
+}
+
+/* Make it responsive */
+@media (max-width: 768px) {
+    .flex-container {
+        flex-direction: column; /* Stack columns on smaller screens */
+    }
+	.main-column, .side-column {
+        flex: 1; /* Both columns take equal space when stacked */
+    }
+}
+
+/* Container for centering content */
+.container {
+    max-width: 1200px;
+    margin: auto;
+    background: #2f4f76;
+    padding: 30px;
+    border-radius: 10px;
+    box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+}
+
+/* Heading styles 1*/
+h1 {
+    font-size: 3rem;
+    color: #d9aa00;
+    margin-bottom: 20px;
+}
+/* Heading styles 3*/
+h3 {
+    font-size: 1rem;
+    color: #d9aa00;
+    margin-bottom: 20px;
+}
+
+/* Textarea styling */
+#scheduleInput {
+    width: 100%;  /* Makes the textarea take full width of its container */
+    max-width: 800px;  /* Prevents it from growing too large on wide screens */
+    min-width: 300px;  /* Prevents it from getting too small */
+    height: 160px;  /* Keeps the height fixed */
+    padding: 10px;
+    font-size: 16px;
+    border: 2px solid white;
+    border-radius: 5px;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+    outline: none;
+    resize: none;
+}
+
+/* Button styles */
+button {
+    background-color: #d9aa00;
+    color: white;
+    font-size: 16px;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    margin: 10px 5px;
+    transition: background-color 0.3s ease-in-out;
+}
+
+button:hover {
+    background-color: #a68200;
+}
+
+/* Hidden buttons styling */
+#addToCalendarButton, #deleteFromCalendarButton {
+    display: none;
+}
+
+/* Response area styling */
+#responseArea {
+    margin-top: 20px;
+    padding: 15px;
+    background: white;
+    border-left: 4px solid #007BFF;
+    border-radius: 5px;
+    text-align: center;
+    font-size: 14px;
+    overflow: auto;
+}
+
+/* Media query for responsiveness */
+@media (max-width: 600px) {
+    .container {
+        width: 100%;
+        padding: 20px;
+    }
+
+    button {
+        width: 100%;
+    }
+}
+
+a:link {
+  color: #d9aa00;
+  background-color: transparent;
+  text-decoration: none;
+}
+
+a:visited {
+  color: #d9aa00;
+  background-color: transparent;
+  text-decoration: none;
+}
+
+a:hover {
+  color: red;
+  background-color: transparent;
+  text-decoration: underline;
+}
+
+a:active {
+  color: red;
+  background-color: transparent;
+  text-decoration: underline;
+}
+
+.rounded-image {
+    border-radius: 15px; /* Adjust the value for desired roundness */
+    overflow: hidden; /* Ensures the rounded corners clip the content */
+    border: 2px solid #d9aa00; /* Optional: Add a border for aesthetics */
+}
