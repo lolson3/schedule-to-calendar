@@ -1,0 +1,19 @@
+ECS 140A - Programming Languages
+MWF 12:10 - 1:00 PM WELLMN 2 M 2:10 - 3:00 PM MDSC C 180 Final Exam: Fri. Mar.21 at 8:00am show details...
+ECS 152A - Computer Networks
+M 1:10 - 2:00 PM OLSON 147 TR 12:10 - 1:30 PM EVERSN 176 Final Exam: Thu. Mar.20 at 10:30am show details...
+ECS 165A - Database Systems
+TR 10:30 - 11:50 AM GIEDT 1002 W 8:00 - 8:50 AM CRUESS 107 Final Exam: Thu. Mar.20 at 8:00am show details...
+
+
+IGNORE Waitlist and show details...
+
+Parse Course Title
+Days (MTWRF)
+Time (end parse at AM or PM)
+Location (end at next day letter)
+From Final Exam to AM or PM
+
+Colors
+#d9aa00 = Davis Gold
+#2f4f76 = Davis Blue

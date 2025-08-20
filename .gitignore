@@ -1,7 +1,6 @@
-Test Schedule Example.txt
-py3.10.6_venv
 .env
 credentials.json
+secrets/
 
 # Python
 __pycache__/
@@ -23,7 +22,7 @@ Thumbs.db
 # Logs
 *.log
 
-# Redis dump (if used)
+# Redis dump
 dump.rdb
 
 # Misc

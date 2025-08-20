@@ -1,4 +1,4 @@
-from date_math import calc_recur, convert_datetime, check_start_end
+from schedule2calendar.date_math import calc_recur, convert_datetime, check_start_end
 from datetime import datetime, timedelta
 from flask import request, jsonify
 import bleach
@@ -126,7 +126,7 @@ def parse_schedule(raw_text):
                 "reminders": {
                     "useDefault": False,
                     "overrides": [
-                        {"method": "popup", "minutes": 60},      # 1 hour before
+                        {"method": "popup", "minutes": 60}, # 1 hour before
                     ],
                 }
             })
@@ -157,7 +157,7 @@ def parse_schedule(raw_text):
                 "reminders": {
                     "useDefault": False,
                     "overrides": [
-                        {"method": "popup", "minutes": 60},       # 1 hour before
+                        {"method": "popup", "minutes": 60}, # 1 hour before
                     ],
                 }
             })

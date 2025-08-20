@@ -27,18 +27,17 @@ class Config():
     REDIS_DB = int(os.getenv("REDIS_DB", "0"))
     REDIS_SCHEME = "rediss" if REDIS_USE_SSL else "redis"
 
-    def get_redis_uri():
-        if Config.REDIS_PASSWORD:
-            redis_uri = f"{Config.REDIS_SCHEME}://:{Config.REDIS_PASSWORD}@{Config.REDIS_HOST}:{Config.REDIS_PORT}/{Config.REDIS_DB}"
-        else:
-            redis_uri = f"{Config.REDIS_SCHEME}://{Config.REDIS_HOST}:{Config.REDIS_PORT}/{Config.REDIS_DB}"
-        return redis_uri
-
     # Flask-Limiter (reads these via init_app)
-    RATELIMIT_STORAGE_URI = get_redis_uri()
+    # Allow direct override via env; otherwise build from parts
+    RATELIMIT_STORAGE_URI = os.getenv("RATELIMIT_STORAGE_URI")
+    if not RATELIMIT_STORAGE_URI:
+        _SCHEME = "rediss" if REDIS_USE_SSL else "redis"
+        _AUTH = f":{REDIS_PASSWORD}@" if REDIS_PASSWORD else ""
+        RATELIMIT_STORAGE_URI = f"{_SCHEME}://{_AUTH}{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
+        
     RATELIMIT_STORAGE_OPTIONS = {"socket_connect_timeout": 30}
     RATELIMIT_STRATEGY = "fixed-window"
-    RATELIMIT_DEFAULT = ["200 per day", "50 per hour"]
+    RATELIMIT_DEFAULT = "200 per day"
     RATELIMIT_HEADERS_ENABLED = True
 
     # Google OAUTH2

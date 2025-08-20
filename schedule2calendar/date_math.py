@@ -12,13 +12,13 @@ def calc_recur(days, month, date):
     schedule_weekdays = [day_map[day] for day in days]  # Convert days to weekday numbers
 
     # Find the last day of the week prior to the final day
-    final_week = end - timedelta(days=end.weekday() + 1)  # Previous Sunday
+    final_week = end - timedelta(days = end.weekday() + 1)  # Previous Sunday
     last_occurrence = schedule_weekdays[-1]
 
     loop_check = 0
 
     while (final_week.weekday() != last_occurrence):
-        final_week -= timedelta(days=1)
+        final_week -= timedelta(days = 1)
         loop_check += 1
         if (loop_check > 31):
             raise ValueError("Infinite loop detected while searching for the last occurrence of the schedule.")

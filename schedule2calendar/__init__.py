@@ -3,7 +3,6 @@ from schedule2calendar.extensions import limiter, csrf, session_ext
 from dotenv import load_dotenv
 from flask import Flask
 from redis import Redis
-import os
 
 def create_app():
     load_dotenv()
@@ -16,13 +15,7 @@ def create_app():
     app.config["SESSION_REDIS"] = app.extensions["redis_client"]
 
     # Initializes rate limiter
-    limiter.init_app(
-        app,
-        strategy = app.config["RATELIMIT_STRATEGY"],
-        default_limits = app.config["RATELIMIT_DEFAULT"],
-        storage_uri = app.config["RATELIMIT_STORAGE_URI"],
-        storage_options = ["RATELIMIT_STORAGE_OPTIONS"],
-    )
+    limiter.init_app(app)
 
     csrf.init_app(app)
     session_ext.init_app(app)

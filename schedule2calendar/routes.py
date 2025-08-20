@@ -1,6 +1,7 @@
 from schedule2calendar.google_service import get_user_credentials, add_batch_callback, delete_batch_callback
+from schedule2calendar.format_schedule import format_recurrence, format_datetime
 from schedule2calendar.schedule_handler import get_schedule, parse_schedule
-from schedule2calendar.validate import validate_event
+from schedule2calendar.validate import validate_event, validate_ongoing_event
 from schedule2calendar.forms import ScheduleForm
 from schedule2calendar.extensions import limiter
 
@@ -13,7 +14,8 @@ from googleapiclient.errors import HttpError
 from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import Flow
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from markupsafe import escape
 import os
 
 main_bp = Blueprint("main", __name__)
@@ -31,9 +33,9 @@ def login():
 
     """Redirects user to Google's OAuth 2.0 server for authentication."""
     flow = Flow.from_client_secrets_file(
-        cfg["GOOGLE_CREDENTIALS"],
+        cfg["GOOGLE_CREDENTIALS_PATH"],
         cfg["SCOPES"],
-        redirect_uri = url_for("callback", _external = True)
+        redirect_uri = url_for("main.callback", _external = True)
     )
     auth_url, state = flow.authorization_url(access_type = "offline", prompt = "consent")
     
@@ -49,17 +51,17 @@ def callback():
     """Handles Google's OAuth 2.0 redirect and fetches credentials."""
     state = session.get("state")
     flow = Flow.from_client_secrets_file(
-        cfg["GOOGLE_CREDENTIALS"],
+        cfg["GOOGLE_CREDENTIALS_PATH"],
         cfg["SCOPES"],
         state = state,
-        redirect_uri=url_for("callback", _external = True)
+        redirect_uri=url_for("main.callback", _external = True)
     )
 
     flow.fetch_token(authorization_response = request.url)
     creds = flow.credentials
 
     # Get user's email
-    service = build("oauth2", "v2", credentials=creds)
+    service = build("oauth2", "v2", credentials = creds)
     user_info = service.userinfo().get().execute()
     email = user_info["email"]
 
@@ -72,7 +74,7 @@ def callback():
     session["email"] = email  # Store user info in session
     session.modified = True  # Force session save
 
-    return redirect(url_for("home"))
+    return redirect(url_for("main.home"))
 
 # Route to handle schedule processing
 @main_bp.route('/process-schedule', methods = ['GET', 'POST'])
@@ -95,11 +97,15 @@ def process_schedule():
         for event in events:
             events_html += f"<strong>{event.get('summary')}</strong><br>"
             events_html += f"Location: {event.get('location')}<br>"
-            events_html += f"Start: {event['start']['dateTime']} ({event['start']['timeZone']})<br>"
-            events_html += f"End: {event['end']['dateTime']} ({event['end']['timeZone']})<br>"
             events_html += f"Description: {event.get('description')}<br>"
+            events_html += f"Start: {escape(format_datetime(event['start']['dateTime']))} ({event['start']['timeZone']})<br>"
+            events_html += f"End: {escape(format_datetime(event['end']['dateTime']))} ({event['end']['timeZone']})<br>"
             if 'recurrence' in event:
-                events_html += f"Recurrence: {', '.join(event['recurrence'])}<br>"
+                formatted_recur = format_recurrence(event['recurrence'])
+                events_html += f"Recurrence: {escape(formatted_recur)}<br>"
+            ongoing = validate_ongoing_event(event)
+            if not ongoing:
+                events_html += f"<span style='color:red;'>This event has already ended and will not be added to the schedule.</span><br>"
             events_html += "</li><br>"
         events_html += "</ul>"
 
@@ -108,7 +114,7 @@ def process_schedule():
     except Exception as e:
         return jsonify({"message": f"An error occurred: {str(e)}"}), 500
     
-@main_bp.route('/add-to-calendar', methods=['GET', 'POST'])
+@main_bp.route('/add-to-calendar', methods = ['GET', 'POST'])
 @limiter.limit("20 per minute", override_defaults = False)  # Limit requests to prevent abuse
 def add_to_calendar():
     try:
@@ -130,8 +136,8 @@ def add_to_calendar():
         creds = get_user_credentials()
         if not creds:
             if request.headers.get("X-Requested-With") == "XMLHttpRequest":
-                return jsonify({"redirect": url_for("login")}), 200  # Force JSON response
-            return jsonify({"redirect": url_for("login")}), 200  # Ensure always JSON
+                return jsonify({"redirect": url_for("main.login")}), 200  # Force JSON response
+            return jsonify({"redirect": url_for("main.login")}), 200  # Ensure always JSON
 
         service = build("calendar", "v3", credentials = creds)
         
@@ -142,7 +148,7 @@ def add_to_calendar():
         event_summaries = {event['summary'] for event in events}
 
         # Calculate the date 6 months ago in RFC3339 format
-        six_months_ago = (datetime.now(datetime.timezone.utc) - timedelta(days = 180)).isoformat() + "Z"  # Adding 'Z' ensures UTC time
+        six_months_ago = (datetime.now(timezone.utc) - timedelta(days = 180)).isoformat()
             
         # Fetch all events from the calendar
         events_result = service.events().list(
@@ -156,7 +162,10 @@ def add_to_calendar():
         event_summaries = {event.get('summary') for event in all_events}
 
         for event in events:
-            if 'summary' in event and event['summary'] in event_summaries:
+            ongoing = validate_ongoing_event(event)
+            if not ongoing:
+                print(f"Skipping event as it has already passed: {event['summary']}")
+            elif 'summary' in event and event['summary'] in event_summaries:
                 print(f"Skipping duplicate event: {event['summary']}")
             else:
                 batch.add(service.events().insert(calendarId = 'primary', body = event))
@@ -168,7 +177,7 @@ def add_to_calendar():
             print(f"Batch insertion complete: {added_count} events added.")
             return {"message": f"{added_count} new events added successfully!"}
         else:
-            return {"message": "No new events were added; all events already exist."}
+            return {"message": "No new events were added; all events have already passed or were already scheduled."}
 
     except Exception as e:
         import traceback
@@ -176,7 +185,7 @@ def add_to_calendar():
         print(error_msg)
         return jsonify({"message": error_msg}), 501
     
-@main_bp.route('/delete-from-calendar', methods=['GET', 'POST'])
+@main_bp.route('/delete-from-calendar', methods = ['GET', 'POST'])
 @limiter.limit("20 per minute", override_defaults=False)  # Limit requests to prevent abuse
 def delete_from_calendar():
     try:
@@ -198,8 +207,8 @@ def delete_from_calendar():
         creds = get_user_credentials()
         if not creds:
             if request.headers.get("X-Requested-With") == "XMLHttpRequest":
-                return jsonify({"redirect": url_for("login")}), 200  # Force JSON response
-            return jsonify({"redirect": url_for("login")}), 200  # Ensure always JSON
+                return jsonify({"redirect": url_for("main.login")}), 200  # Force JSON response
+            return jsonify({"redirect": url_for("main.login")}), 200  # Ensure always JSON
         
         service = build("calendar", "v3", credentials=creds)
 
@@ -208,7 +217,7 @@ def delete_from_calendar():
         event_summaries = {event['summary'] for event in events}
 
         # Calculate the date 6 months ago in RFC3339 format
-        six_months_ago = (datetime.now(datetime.timezone.utc) - timedelta(days = 180)).isoformat() + "Z"  # Adding 'Z' ensures UTC time
+        six_months_ago = (datetime.now(timezone.utc) - timedelta(days = 180)).isoformat()
 
         # Fetch all events from the calendar
         events_result = service.events().list(

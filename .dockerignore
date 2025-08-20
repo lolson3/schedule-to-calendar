@@ -1,0 +1,31 @@
+# Keep secrets out of the image build context
+.env
+secrets/
+credentials.json
+*.pem
+*.key
+*.crt
+
+# VCS / editor / OS junk
+.git
+.gitignore
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Python build artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Flask instance & logs
+instance/
+*.log
+
+# Redis dumps (if any)
+dump.rdb
+
+# Misc temp
+*.bak
+*.swp
