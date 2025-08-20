@@ -1,6 +1,6 @@
 # Schedule2Calendar
 
-Schedule2Calendar is a Flask-based web application that parses student schedules from plain text and automatically creates events in Google Calendar. It supports lectures, discussions, and final exams with intelligent recurrence rules and event reminders.
+Schedule2Calendar is a Flask-based web application that parses UC Davis student schedules from plain text and automatically creates events in Google Calendar. It supports lectures, discussions, and final exams with intelligent recurrence rules and event reminders.
 
 ## Features
 
