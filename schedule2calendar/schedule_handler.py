@@ -1,7 +1,9 @@
 from schedule2calendar.date_math import calc_recur, convert_datetime, check_start_end
 from datetime import datetime, timedelta
 from flask import request, jsonify
+import unicodedata
 import bleach
+import html
 import re
 
 # Fetches a schedule and sanitizes it
@@ -9,6 +11,7 @@ def get_schedule() -> str | tuple:
     data = request.json
     dirty_schedule = data.get("schedule", "")
     schedule = bleach.clean(dirty_schedule, tags = [], strip = True)
+    schedule = html.unescape(schedule)
 
     if len(schedule) == 0:
         return "<h2>No input detected. Please enter your schedule to generate an event preview.</h2>", 400
@@ -21,145 +24,122 @@ def get_schedule() -> str | tuple:
         return jsonify({"message": "Invalid input: 'schedule' must be a string"}), 402
 
     # Validate content (e.g., allow only alphanumeric, spaces, and certain punctuation)
-    if not re.match(r'^[a-zA-Z0-9\s,.\-:#]+$', schedule):
+    if not re.match(r'^[a-zA-Z0-9\s,.\-:/#&()]+$', schedule):
         return "<h2>Invalid input. Please only enter characters that may appear in your schedule.</h2>", 403
     
     return schedule
 
 # Regex to parse schedule
 def parse_schedule(raw_text):
+    # Normalize
+    text = html.unescape(raw_text)
+    text = unicodedata.normalize("NFKC", text).replace("\r\n", "\n")
 
-    # Regex pattern for extracting each course block
-    course_block_pattern = r"(?P<course>[A-Z]+\s[0-9]+.\s-\s\S+\s\S+)\n(?P<details>.+?Final Exam: .+?)(?=\n[A-Z]+\s[0-9]+.\s-\s\S+\s\S+|\Z)"
+    # Patterns
+    header_re = re.compile(
+        r'(?P<dept>[A-Z]{2,4})\s+(?P<num>\d{2,3}[A-Z]?)\s*[-–]\s*'
+        r'(?P<title>[A-Za-z0-9&/()\'’:,.\- ]+?)'
+        r'(?=\s+(?:[MTWRFSU]{1,5}(?:/[MTWRFSU]{1,5})*\b)'   # days token starts
+        r'|\s*Final\s*Exam:'                                  # or "Final Exam:"
+        r'|[ \t]*\r?\n'                                       # or newline
+        r'|[A-Z]{2,4}\s+\d{2,3}[A-Z]?\s*[-–]'                 # or next header
+        r'|$)'
+    )
 
-    # Regex patterns for course details
-    schedule_pattern = r"(?P<lecture_days>\b[MTWRF]{2,}\b) (?P<lecture_time_start>[0-9]+:[0-9]+) - (?P<lecture_time_end>[0-9]+:[0-9]+) (?P<lecture_apm>[APM]+) (?P<lecture_location>(?:[A-Z]+\s)+\S+)"
-    discussion_pattern = r"(?P<discussion_day>\b[MTWRF]\b) (?P<discussion_time_start>[0-9]+:[0-9]+) - (?P<discussion_time_end>[0-9]+:[0-9]+) (?P<discussion_apm>[APM]+) (?P<discussion_location>(?:[A-Z]+\s)+\S+)"
-    final_pattern = r"Final Exam: (?P<final_day>\w+). (?P<final_month>\w+).(?P<final_date>\d+).+ (?P<final_time_start>.+[apm]\b)"
+    meeting_re = re.compile(r'''
+        (?P<days>\b[MTWRFSU]{1,5}(?:/[MTWRFSU]{1,5})*\b) \s+          # M, TR, M/WF, etc.
+        (?P<start>\d{1,2}:\d{2}) \s*-\s* (?P<end>\d{1,2}:\d{2}) \s*   # 10:30 - 11:50
+        (?P<ampm>[AaPp][Mm])? \s+                                     # optional AM/PM (applies to both)
+        (?P<building>[A-Z][A-Z0-9&\-]*) \s+ (?P<room>[A-Za-z0-9\-]+)  # KEMPER 2110, 90A, etc.
+    ''', re.VERBOSE | re.IGNORECASE | re.DOTALL)
 
-    # Processes each course block
-    course_blocks = re.finditer(course_block_pattern, raw_text, re.DOTALL)
+    final_re = re.compile(
+        r'Final\s*Exam:\s*(?P<wday>[A-Za-z]{3,})\.?\s+'
+        r'(?P<month>[A-Za-z]{3,})\.?\s*(?P<date>\d{1,2})\s+at\s+'
+        r'(?P<time>\d{1,2}:\d{2}\s*[AaPp][Mm])',
+        re.IGNORECASE | re.DOTALL
+    )
+
+    # Scan headers first
+    headers = list(header_re.finditer(text))
     events = []
-    for block in course_blocks:
 
-        course_name = block.group("course")
-        details = block.group("details")
+    def slice_block(i):
+        start = headers[i].start()
+        end = headers[i+1].start() if i+1 < len(headers) else len(text)
+        return text[start:end]
 
-        # Extracts details
-        lecture_match = re.search(schedule_pattern, details)
-        discussion_match = re.search(discussion_pattern, details)
-        final_match = re.search(final_pattern, details)
-        
-        # Assign extracted details to variables for lecture info
-        lecture_days = lecture_match.group("lecture_days") if lecture_match else None
-        lecture_time_start = lecture_match.group("lecture_time_start") if lecture_match else None
-        lecture_time_end = lecture_match.group("lecture_time_end") if lecture_match else None
-        lecture_apm = lecture_match.group("lecture_apm") if lecture_match else None
-        lecture_location = lecture_match.group("lecture_location") if lecture_match else None
+    for i, h in enumerate(headers):
+        course_name = f"{h.group('dept')} {h.group('num')} - {h.group('title').strip()}"
+        block = slice_block(i)
 
-        # Assign extracted details to variables for discussion info
-        discussion_day = discussion_match.group("discussion_day") if discussion_match else None
-        discussion_time_start = discussion_match.group("discussion_time_start") if discussion_match else None
-        discussion_time_end = discussion_match.group("discussion_time_end") if discussion_match else None
-        discussion_apm = discussion_match.group("discussion_apm") if discussion_match else None
-        discussion_location = discussion_match.group("discussion_location") if discussion_match else None
+        # Final exam (optional)
+        f = final_re.search(block)
+        final_month = f.group('month') if f else None
+        final_date = f.group('date') if f else None
+        final_time_start = (f.group('time').replace(" ", "").upper() if f else None)
 
-        # Assign extracted details to variables for final exam info
-        # final_day = final_match.group("final_day") if final_match else None
-        final_month = final_match.group("final_month") if final_match else None
-        final_date = final_match.group("final_date") if final_match else None
-        final_time_start = final_match.group("final_time_start") if final_match else None
-        final_time_end = (datetime.strptime(final_time_start, '%I:%M%p') + timedelta(hours = 2)).strftime('%I:%M%p')  # Assume 2-hour exam
+        # collect meetings first
+        meetings = []
+        first_location = None
+        lecture_location = None  # we'll prefer this for the final
 
-        # Add Final Exam details to events if course & exam exist
-        if (course_name and final_match):
-            final_start = convert_datetime(time = final_time_start, month = final_month, date = final_date)
-            final_end = convert_datetime(time = final_time_end, month = final_month, date = final_date)
+        for m in meeting_re.finditer(block):
+            days = m.group('days')
+            day_count = len(re.findall(r'[MTWRFSU]', days.upper()))
+            meeting_type = "Lecture" if day_count > 1 else "Discussion/Lab"
 
-            # Error checking
-            final_start, final_end = check_start_end(final_start, final_end)
+            start = m.group('start')
+            end = m.group('end')
+            ampm = (m.group('ampm') or "").upper()
+            location = f"{m.group('building').upper()} {m.group('room')}"
 
+            if first_location is None:
+                first_location = location
+            if lecture_location is None and meeting_type == "Lecture":
+                lecture_location = location
+
+            meetings.append({
+                "days": days,
+                "start": start,
+                "end": end,
+                "ampm": ampm,
+                "location": location,
+                "meeting_type": meeting_type,
+            })
+
+        for mm in meetings:
+            start_dt = convert_datetime(time=mm["start"], apm=mm["ampm"], schedule_days=mm["days"])
+            end_dt   = convert_datetime(time=mm["end"],   apm=mm["ampm"], schedule_days=mm["days"])
+            start_dt, end_dt = check_start_end(start_dt, end_dt)
+
+            events.append({
+                "summary": f"{course_name} ({mm['meeting_type']})",
+                "location": mm["location"],
+                "description": mm["location"],
+                "start": {"dateTime": start_dt, "timeZone": "America/Los_Angeles"},
+                "end":   {"dateTime": end_dt,   "timeZone": "America/Los_Angeles"},
+                "recurrence": [calc_recur(mm["days"], final_month, final_date)],
+                "reminders": {"useDefault": False, "overrides": [{"method": "popup", "minutes": 60}]},
+            })
+
+        # final exam event (if present) uses LECTURE location, with sensible fallback
+        final_location = lecture_location or first_location or ""
+        if final_month and final_date and final_time_start:
+            final_end = (datetime.strptime(final_time_start, "%I:%M%p") + timedelta(hours=2)).strftime("%I:%M%p")
+            fs = convert_datetime(time=final_time_start, month=final_month, date=final_date)
+            fe = convert_datetime(time=final_end,   month=final_month, date=final_date)
+            fs, fe = check_start_end(fs, fe)
             events.append({
                 "summary": f"{course_name} Final Exam",
-                "location": f"{lecture_location}",
-                "description": f"{lecture_location}",
-                "start": {
-                    "dateTime": final_start,
-                    "timeZone": "America/Los_Angeles"
-                },
-                "end":  {
-                    "dateTime": final_end,
-                    "timeZone": "America/Los_Angeles"
-                },
-                "reminders": {
-                    "useDefault": False,
-                    "overrides": [
-                        {"method": "popup", "minutes": 60},      # 1 hour before
-                        {"method": "popup", "minutes": 24 * 60}  # 1 day before (1440 minutes)
-                    ],
-                }
-            })
-
-        # Add lecture details to events if course & schedule exist
-        if (course_name and lecture_match):
-            lecture_start = convert_datetime(time = lecture_time_start, apm = lecture_apm, schedule_days = lecture_days)
-            lecture_end = convert_datetime(time = lecture_time_end, apm = lecture_apm, schedule_days = lecture_days)
-
-            # Error checking
-            lecture_start, lecture_end = check_start_end(lecture_start, lecture_end)
-
-            events.append({
-                "summary": f"{course_name} Lecture",
-                "location": lecture_location,
-                "description": lecture_location,
-                "start": {
-                    "dateTime": lecture_start,
-                    "timeZone": "America/Los_Angeles"
-                },
-                "end": {
-                    "dateTime": lecture_end,
-                    "timeZone": "America/Los_Angeles"
-                },
-                "recurrence": [
-                    calc_recur(lecture_days, final_month, final_date)
-                ],
-                "reminders": {
-                    "useDefault": False,
-                    "overrides": [
-                        {"method": "popup", "minutes": 60}, # 1 hour before
-                    ],
-                }
-            })
-
-        # Add discussion details to events if course & discussion exist
-        if (course_name and discussion_match):
-            discussion_start = convert_datetime(time = discussion_time_start, apm = discussion_apm, schedule_days = discussion_day)
-            discussion_end = convert_datetime(time = discussion_time_end, apm = discussion_apm, schedule_days = discussion_day)
-
-            # Error checking
-            discussion_start, discussion_end = check_start_end(discussion_start, discussion_end)
-
-            events.append({
-                "summary": f"{course_name} Discussion",
-                "location": discussion_location,
-                "description": discussion_location,
-                "start": {
-                    "dateTime": discussion_start,
-                    "timeZone": "America/Los_Angeles"
-                },
-                "end": {
-                    "dateTime": discussion_end,
-                    "timeZone": "America/Los_Angeles"
-                },
-                "recurrence": [
-                    calc_recur(discussion_day, final_month, final_date)
-                ],
-                "reminders": {
-                    "useDefault": False,
-                    "overrides": [
-                        {"method": "popup", "minutes": 60}, # 1 hour before
-                    ],
-                }
+                "location": final_location,
+                "description": final_location,
+                "start": {"dateTime": fs, "timeZone": "America/Los_Angeles"},
+                "end":   {"dateTime": fe, "timeZone": "America/Los_Angeles"},
+                "reminders": {"useDefault": False, "overrides": [
+                    {"method": "popup", "minutes": 60},
+                    {"method": "popup", "minutes": 24 * 60},
+                ]},
             })
 
     return events
